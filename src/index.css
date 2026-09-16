@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-serif: 'Playfair Display', Georgia, serif;
+    --font-brand: 'Cinzel', serif;
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #0b0b0e;
+    color: #f4f1ea;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  h1, h2, h3, .font-serif-luxury {
+    font-family: var(--font-serif);
+  }
+
+  .font-brand {
+    font-family: var(--font-brand);
+    letter-spacing: 0.15em;
+  }
+}
+
+/* Custom subtle scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: #111115;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2a2a32;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #c5a059;
+}
+
+/* Hide scrollbar for horizontal category scrolling while keeping swipe functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Gold gradient shine subtle effect */
+.gold-gradient-text {
+  background: linear-gradient(135deg, #f5d78a 0%, #c89c46 50%, #e6ca65 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.gold-gradient-bg {
+  background: linear-gradient(135deg, #d8ab4e 0%, #b88a32 100%);
+}
+
+.gold-border-subtle {
+  border-color: rgba(212, 175, 55, 0.2);
+}

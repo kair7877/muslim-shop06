@@ -1,0 +1,6 @@
+{
+  "name": "MUSLIM SHOP",
+  "description": "Премиальный интернет-магазин в Атырау — натуральные товары для здоровья и красоты, исламские товары, заказ в 1 клик через WhatsApp (+7 778 175-42-41) и расписание намаза.",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
