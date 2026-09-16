@@ -380,28 +380,31 @@ export default function App() {
   };
 
   // Admin Handlers
-  const handleSaveProduct = (prod: Product) => {
-    const updated = storageService.saveProduct(prod);
+  const handleSaveProduct = async (prod: Product) => {
+    const updated = await storageService.saveProduct(prod);
     setProducts([...updated]);
   };
 
-  const handleDeleteProduct = (id: string) => {
-    const updated = storageService.deleteProduct(id);
+  const handleDeleteProduct = async (id: string) => {
+    const updated = await storageService.deleteProduct(id);
     setProducts([...updated]);
+    if (selectedProduct?.id === id) {
+      handleCloseProduct();
+    }
   };
 
-  const handleSaveCategory = (cat: Category) => {
-    const updated = storageService.saveCategory(cat);
+  const handleSaveCategory = async (cat: Category) => {
+    const updated = await storageService.saveCategory(cat);
     setCategories([...updated]);
   };
 
-  const handleDeleteCategory = (id: string) => {
-    const updated = storageService.deleteCategory(id);
+  const handleDeleteCategory = async (id: string) => {
+    const updated = await storageService.deleteCategory(id);
     setCategories([...updated]);
   };
 
-  const handleReorderCategories = (newCats: Category[]) => {
-    storageService.saveCategories(newCats);
+  const handleReorderCategories = async (newCats: Category[]) => {
+    await storageService.saveCategories(newCats);
     setCategories([...newCats]);
   };
 
@@ -410,8 +413,8 @@ export default function App() {
     setOrders([...updated]);
   };
 
-  const handleSaveSettings = (newSettings: StoreSettings) => {
-    storageService.saveSettings(newSettings);
+  const handleSaveSettings = async (newSettings: StoreSettings) => {
+    await storageService.saveSettings(newSettings);
     setSettings({ ...newSettings });
   };
 
@@ -467,10 +470,14 @@ export default function App() {
       if (sortBy === 'popular') {
         if (a.isHit && !b.isHit) return -1;
         if (!a.isHit && b.isHit) return 1;
-        return 0;
+        const timeA = new Date(a.createdAt || 0).getTime();
+        const timeB = new Date(b.createdAt || 0).getTime();
+        return timeB - timeA;
       }
       if (sortBy === 'newest') {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        const timeA = new Date(a.createdAt || 0).getTime();
+        const timeB = new Date(b.createdAt || 0).getTime();
+        return timeB - timeA;
       }
       if (sortBy === 'price_asc') {
         return a.price - b.price;

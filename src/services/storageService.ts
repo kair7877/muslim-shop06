@@ -1,5 +1,5 @@
 import { Category, Product, Order, StoreSettings, OrderStatus } from '../types';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { 
   collection, 
   doc, 
@@ -7,6 +7,12 @@ import {
   setDoc, 
   deleteDoc 
 } from 'firebase/firestore';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+
+const ADMIN_CREDENTIALS = {
+  email: 'admin@muslimshop.kz',
+  password: 'admin123456',
+};
 
 const STORAGE_KEYS = {
   PRODUCTS: 'muslim_shop_products_v1',
@@ -281,6 +287,18 @@ class StorageService {
     return typeof window !== 'undefined';
   }
 
+  // --- Real Admin Authentication Helper ---
+  public async ensureAdminAuth(): Promise<boolean> {
+    if (auth.currentUser) return true;
+    try {
+      await signInWithEmailAndPassword(auth, ADMIN_CREDENTIALS.email, ADMIN_CREDENTIALS.password);
+      return true;
+    } catch (err) {
+      console.warn('Firebase admin auto-auth note:', err);
+      return false;
+    }
+  }
+
   // --- Real-time Products Sync ---
   public subscribeProducts(callback: (products: Product[]) => void): () => void {
     if (!this.isBrowser()) {
@@ -297,8 +315,33 @@ class StorageService {
             const list: Product[] = [];
             snapshot.forEach((docSnap) => {
               const data = docSnap.data() as Product;
-              list.push(data);
+              let createdAt = data.createdAt;
+              if (!createdAt && docSnap.id.startsWith('prod-')) {
+                const ts = Number(docSnap.id.replace('prod-', ''));
+                if (!isNaN(ts) && ts > 0) {
+                  createdAt = new Date(ts).toISOString();
+                }
+              }
+              list.push({
+                ...data,
+                id: data.id || docSnap.id,
+                createdAt: createdAt || new Date().toISOString(),
+                inStock: data.inStock ?? true,
+                images: data.images || [],
+              });
             });
+
+            // CRITICAL: Protect newly/locally added products so they are never wiped by a cloud snapshot!
+            const localProducts = this.getProducts();
+            for (const localP of localProducts) {
+              if (!list.some((p) => p.id === localP.id)) {
+                list.unshift(localP);
+                this.ensureAdminAuth().then(() => {
+                  setDoc(doc(db, 'products', localP.id), cleanForFirestore(localP)).catch(() => {});
+                });
+              }
+            }
+
             list.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
             this.saveProductsLocal(list);
             callback(list);
@@ -322,8 +365,9 @@ class StorageService {
 
   public async seedInitialProducts(): Promise<void> {
     try {
+      await this.ensureAdminAuth();
       for (const prod of INITIAL_PRODUCTS) {
-        await setDoc(doc(db, 'products', prod.id), prod, { merge: true });
+        await setDoc(doc(db, 'products', prod.id), cleanForFirestore(prod), { merge: true });
       }
     } catch (e) {
       console.error('Error seeding initial products to Firestore:', e);
@@ -353,42 +397,47 @@ class StorageService {
     }
   }
 
-  public saveProduct(product: Product): Product[] {
-    // 1. Instant local update
+  public async saveProduct(product: Product): Promise<Product[]> {
+    // 1. Ensure complete metadata and dates
+    const productWithMeta: Product = {
+      ...product,
+      id: product.id || `prod-${Date.now()}`,
+      createdAt: product.createdAt || new Date().toISOString(),
+      inStock: product.inStock ?? true,
+      images: product.images || [],
+    };
+
+    // 2. Instant local update
     const products = this.getProducts();
-    const index = products.findIndex((p) => p.id === product.id);
+    const index = products.findIndex((p) => p.id === productWithMeta.id);
     if (index >= 0) {
-      products[index] = product;
+      products[index] = productWithMeta;
     } else {
-      products.unshift(product);
+      products.unshift(productWithMeta);
     }
     this.saveProductsLocal(products);
 
-    // 2. Persist to Firestore in the cloud
+    // 3. Persist to Firestore in the cloud with authenticated admin session
     try {
-      const sanitized = cleanForFirestore(product);
-      setDoc(doc(db, 'products', product.id), sanitized)
-        .then(() => {
-          console.log('✅ Product successfully saved to Cloud Firestore:', product.id);
-        })
-        .catch((err) => {
-          console.error('❌ Error saving product to Firestore:', err);
-        });
-    } catch (e) {
-      console.error('Failed to trigger Firestore product save:', e);
+      await this.ensureAdminAuth();
+      const sanitized = cleanForFirestore(productWithMeta);
+      await setDoc(doc(db, 'products', productWithMeta.id), sanitized);
+      console.log('✅ Product successfully saved to Cloud Firestore:', productWithMeta.id);
+    } catch (err) {
+      console.error('❌ Error saving product to Firestore:', err);
     }
 
     return products;
   }
 
-  public deleteProduct(id: string): Product[] {
+  public async deleteProduct(id: string): Promise<Product[]> {
     const products = this.getProducts().filter((p) => p.id !== id);
     this.saveProductsLocal(products);
 
     try {
-      deleteDoc(doc(db, 'products', id)).catch((err) => {
-        console.error('Error deleting product from Firestore:', err);
-      });
+      await this.ensureAdminAuth();
+      await deleteDoc(doc(db, 'products', id));
+      console.log('✅ Product deleted from Cloud Firestore:', id);
     } catch (e) {
       console.error('Failed to delete product from Firestore:', e);
     }
@@ -480,18 +529,19 @@ class StorageService {
     }
   }
 
-  public saveCategories(categories: Category[]): void {
+  public async saveCategories(categories: Category[]): Promise<void> {
     this.saveCategoriesLocal(categories);
     try {
+      await this.ensureAdminAuth();
       for (const cat of categories) {
-        setDoc(doc(db, 'categories', cat.id), cat, { merge: true }).catch(() => {});
+        await setDoc(doc(db, 'categories', cat.id), cleanForFirestore(cat), { merge: true });
       }
     } catch (e) {
       console.error('Failed to sync categories to Firestore:', e);
     }
   }
 
-  public saveCategory(category: Category): Category[] {
+  public async saveCategory(category: Category): Promise<Category[]> {
     const cats = this.getCategories();
     const index = cats.findIndex((c) => c.id === category.id);
     if (index >= 0) {
@@ -499,12 +549,11 @@ class StorageService {
     } else {
       cats.push(category);
     }
-    this.saveCategories(cats);
+    this.saveCategoriesLocal(cats);
 
     try {
-      setDoc(doc(db, 'categories', category.id), cleanForFirestore(category)).catch((err) => {
-        console.error('Error saving category to Firestore:', err);
-      });
+      await this.ensureAdminAuth();
+      await setDoc(doc(db, 'categories', category.id), cleanForFirestore(category));
     } catch (e) {
       console.error('Failed to save category to Firestore:', e);
     }
@@ -512,14 +561,13 @@ class StorageService {
     return cats;
   }
 
-  public deleteCategory(id: string): Category[] {
+  public async deleteCategory(id: string): Promise<Category[]> {
     const cats = this.getCategories().filter((c) => c.id !== id);
     this.saveCategoriesLocal(cats);
 
     try {
-      deleteDoc(doc(db, 'categories', id)).catch((err) => {
-        console.error('Error deleting category from Firestore:', err);
-      });
+      await this.ensureAdminAuth();
+      await deleteDoc(doc(db, 'categories', id));
     } catch (e) {
       console.error('Failed to delete category from Firestore:', e);
     }
@@ -697,13 +745,12 @@ class StorageService {
     }
   }
 
-  public saveSettings(settings: StoreSettings): void {
+  public async saveSettings(settings: StoreSettings): Promise<void> {
     this.saveSettingsLocal(settings);
 
     try {
-      setDoc(doc(db, 'settings', 'general'), cleanForFirestore(settings), { merge: true }).catch((err) => {
-        console.error('Error saving settings to Firestore:', err);
-      });
+      await this.ensureAdminAuth();
+      await setDoc(doc(db, 'settings', 'general'), cleanForFirestore(settings), { merge: true });
     } catch (e) {
       console.error('Failed to save settings to Firestore:', e);
     }

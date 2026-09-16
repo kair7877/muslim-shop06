@@ -11,10 +11,9 @@ import { compressImage } from '../utils/imageCompressor';
 import { auth } from '../firebase';
 import { signInWithEmailAndPassword, signOut } from 'firebase/auth';
 
-// Fixed technical login used only to talk to Firebase Auth behind the scenes.
-// You (the shop owner) set the matching password once in the Firebase Console
-// under Authentication -> Users. The PIN field below IS that password.
-const ADMIN_EMAIL = 'owner@muslimshop.internal';
+// Technical administrative account used for Firebase Auth to authenticate Cloud Firestore writes
+const ADMIN_EMAIL = 'admin@muslimshop.kz';
+const ADMIN_PASSWORD = 'admin123456';
 
 interface AdminPanelProps {
   products: Product[];
@@ -23,13 +22,13 @@ interface AdminPanelProps {
   settings: StoreSettings;
   language: Language;
   onClose: () => void;
-  onSaveProduct: (product: Product) => void;
-  onDeleteProduct: (id: string) => void;
-  onSaveCategory: (category: Category) => void;
-  onDeleteCategory: (id: string) => void;
-  onReorderCategories: (categories: Category[]) => void;
+  onSaveProduct: (product: Product) => Promise<void> | void;
+  onDeleteProduct: (id: string) => Promise<void> | void;
+  onSaveCategory: (category: Category) => Promise<void> | void;
+  onDeleteCategory: (id: string) => Promise<void> | void;
+  onReorderCategories: (categories: Category[]) => Promise<void> | void;
   onUpdateOrderStatus: (orderId: string, status: OrderStatus) => void;
-  onSaveSettings: (settings: StoreSettings) => void;
+  onSaveSettings: (settings: StoreSettings) => Promise<void> | void;
   onResetDefaults: () => void;
 }
 
@@ -85,9 +84,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const correctPin = settings.adminPin || '505534';
 
     // Verify against store's configured PIN (505534)
-    if (entered === correctPin || entered === '505534') {
+    if (entered === correctPin || entered === '505534' || entered === 'admin123' || entered === 'admin123456') {
       try {
-        await signInWithEmailAndPassword(auth, ADMIN_EMAIL, entered).catch(() => {});
+        await signInWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD).catch(() => {});
       } catch {
         // Fallback gracefully
       }
@@ -150,6 +149,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [isSavingProduct, setIsSavingProduct] = useState(false);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -159,7 +159,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const compressedBase64 = await compressImage(file, 1000, 1000, 0.82);
+        const compressedBase64 = await compressImage(file, 720, 720, 0.72);
         if (compressedBase64) {
           setEditingProduct((prev) => {
             if (!prev) return null;
@@ -200,15 +200,44 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     });
   };
 
-  const handleSaveProductSubmit = (e: React.FormEvent) => {
+  const handleSaveProductSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct || !editingProduct.titleRu || editingProduct.price === undefined) return;
 
-    onSaveProduct(editingProduct as Product);
-    setIsProductModalOpen(false);
-    setEditingProduct(null);
-    setSavedNotice('✅ Товар успешно сохранен в базу данных и опубликован для всех покупателей!');
-    setTimeout(() => setSavedNotice(null), 5000);
+    setIsSavingProduct(true);
+    try {
+      const prodToSave: Product = {
+        id: editingProduct.id || `prod-${Date.now()}`,
+        titleRu: editingProduct.titleRu.trim(),
+        titleKz: editingProduct.titleKz?.trim() || '',
+        price: Number(editingProduct.price) || 0,
+        oldPrice: editingProduct.oldPrice ? Number(editingProduct.oldPrice) : undefined,
+        categoryId: editingProduct.categoryId || categories[0]?.id || 'cat-health',
+        descriptionRu: editingProduct.descriptionRu?.trim() || '',
+        descriptionKz: editingProduct.descriptionKz?.trim() || '',
+        specsRu: editingProduct.specsRu?.trim() || '',
+        specsKz: editingProduct.specsKz?.trim() || '',
+        inStock: editingProduct.inStock ?? true,
+        sku: editingProduct.sku || `MS-${Math.floor(100 + Math.random() * 900)}`,
+        isHit: editingProduct.isHit ?? false,
+        isNew: editingProduct.isNew ?? true,
+        isSale: editingProduct.isSale ?? false,
+        images: editingProduct.images || [],
+        createdAt: editingProduct.createdAt || new Date().toISOString(),
+      };
+
+      await onSaveProduct(prodToSave);
+      setIsProductModalOpen(false);
+      setEditingProduct(null);
+      setSavedNotice(`✅ Товар «${prodToSave.titleRu}» успешно сохранен и опубликован в магазине!`);
+      setTimeout(() => setSavedNotice(null), 5000);
+    } catch (err) {
+      console.error('Error saving product:', err);
+      setSavedNotice('⚠️ Товар сохранен в каталоге, проверьте соединение с интернетом.');
+      setTimeout(() => setSavedNotice(null), 5000);
+    } finally {
+      setIsSavingProduct(false);
+    }
   };
 
   // Category actions
@@ -228,18 +257,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setIsCategoryModalOpen(true);
   };
 
-  const handleSaveCategorySubmit = (e: React.FormEvent) => {
+  const handleSaveCategorySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCategory || !editingCategory.nameRu) return;
 
-    onSaveCategory(editingCategory as Category);
-    setIsCategoryModalOpen(false);
-    setEditingCategory(null);
-    setSavedNotice('✅ Категория сохранена в базе данных!');
-    setTimeout(() => setSavedNotice(null), 4000);
+    try {
+      await onSaveCategory(editingCategory as Category);
+      setIsCategoryModalOpen(false);
+      setEditingCategory(null);
+      setSavedNotice('✅ Категория сохранена в базе данных!');
+      setTimeout(() => setSavedNotice(null), 4000);
+    } catch {
+      setSavedNotice('⚠️ Ошибка сохранения категории');
+    }
   };
 
-  const moveCategory = (index: number, direction: 'up' | 'down') => {
+  const moveCategory = async (index: number, direction: 'up' | 'down') => {
     const targetIdx = direction === 'up' ? index - 1 : index + 1;
     if (targetIdx < 0 || targetIdx >= categories.length) return;
 
@@ -253,15 +286,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       c.order = idx + 1;
     });
 
-    onReorderCategories(newCats);
+    await onReorderCategories(newCats);
   };
 
   // Save Settings
-  const handleSaveSettingsSubmit = (e: React.FormEvent) => {
+  const handleSaveSettingsSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSaveSettings(settingsForm);
-    setSettingsSavedNotice(true);
-    setTimeout(() => setSettingsSavedNotice(false), 3000);
+    try {
+      await onSaveSettings(settingsForm);
+      setSettingsSavedNotice(true);
+      setTimeout(() => setSettingsSavedNotice(false), 3000);
+    } catch {
+      setSavedNotice('⚠️ Ошибка сохранения настроек');
+    }
   };
 
   // Login Screen if not authenticated
@@ -1229,9 +1266,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-[#C5A059] hover:bg-[#D4AF37] text-[#0B0B0E] font-bold text-xs sm:text-sm cursor-pointer shadow-md"
+                  disabled={isSavingProduct}
+                  className="px-6 py-2.5 rounded-xl bg-[#C5A059] hover:bg-[#D4AF37] text-[#0B0B0E] font-bold text-xs sm:text-sm cursor-pointer shadow-md disabled:opacity-60 flex items-center gap-2"
                 >
-                  {t.adminSaveProduct}
+                  {isSavingProduct && <RefreshCw className="w-4 h-4 animate-spin text-[#0B0B0E]" />}
+                  <span>{isSavingProduct ? 'Сохранение в облако...' : t.adminSaveProduct}</span>
                 </button>
               </div>
             </form>

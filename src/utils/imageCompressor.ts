@@ -1,8 +1,8 @@
 export async function compressImage(
   file: File,
-  maxWidth = 800,
-  maxHeight = 800,
-  quality = 0.7
+  maxWidth = 720,
+  maxHeight = 720,
+  quality = 0.72
 ): Promise<string> {
   return new Promise((resolve) => {
     const reader = new FileReader();
@@ -34,7 +34,21 @@ export async function compressImage(
         }
 
         ctx.drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+        let dataUrl = canvas.toDataURL('image/jpeg', quality);
+
+        // Guard against oversized base64 (> 250KB) to protect Firestore document size
+        if (dataUrl.length > 250000) {
+          const secondCanvas = document.createElement('canvas');
+          const scale = 0.75;
+          secondCanvas.width = Math.round(width * scale);
+          secondCanvas.height = Math.round(height * scale);
+          const ctx2 = secondCanvas.getContext('2d');
+          if (ctx2) {
+            ctx2.drawImage(img, 0, 0, secondCanvas.width, secondCanvas.height);
+            dataUrl = secondCanvas.toDataURL('image/jpeg', 0.65);
+          }
+        }
+
         resolve(dataUrl);
       };
       img.onerror = () => resolve(event.target?.result as string);
@@ -42,3 +56,4 @@ export async function compressImage(
     reader.onerror = () => resolve('');
   });
 }
+
