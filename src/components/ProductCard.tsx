@@ -55,6 +55,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
   return (
     <div
+      id={`product-card-${product.id}`}
       onClick={() => onSelectProduct(product)}
       className="group relative flex flex-col bg-[#121217] rounded-2xl border border-[#23232C] hover:border-[#C5A059]/40 transition-all duration-300 overflow-hidden cursor-pointer shadow-[0_4px_16px_rgba(0,0,0,0.3)] hover:shadow-[0_8px_24px_rgba(197,160,89,0.12)]"
     >
@@ -65,6 +66,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             src={mainImage}
             alt={title}
             loading="lazy"
+            referrerPolicy="no-referrer"
+            crossOrigin="anonymous"
             onError={() => setImgError(true)}
             className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
           />

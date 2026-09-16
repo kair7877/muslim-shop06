@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, ShoppingBag, Zap, Check, ChevronLeft, ChevronRight, Maximize2, MessageCircle, Sparkles, HelpCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, ArrowLeft, ShoppingBag, Zap, Check, ChevronLeft, ChevronRight, Maximize2, MessageCircle, Sparkles, HelpCircle } from 'lucide-react';
 import { Product, Language, Category } from '../types';
 import { translations } from '../translations';
 import { formatTenge, generateSingleProductWhatsAppUrl } from '../utils/formatters';
@@ -26,9 +26,17 @@ export const ProductModal: React.FC<ProductModalProps> = ({
   if (!product) return null;
 
   const [activeImgIndex, setActiveImgIndex] = useState(0);
+  const [imgError, setImgError] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [isAdded, setIsAdded] = useState(false);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+
+  // Reset image index and error state whenever product changes
+  useEffect(() => {
+    setActiveImgIndex(0);
+    setImgError(false);
+    setQuantity(1);
+  }, [product.id]);
 
   const t = translations[language];
   const title = language === 'ru' ? product.titleRu : (product.titleKz || product.titleRu);
@@ -40,8 +48,19 @@ export const ProductModal: React.FC<ProductModalProps> = ({
     ? language === 'ru' ? category.nameRu : (category.nameKz || category.nameRu)
     : '';
 
-  const images = product.images && product.images.length > 0 ? product.images : [];
-  const currentImage = images[activeImgIndex] || null;
+  // Extract all potential images safely
+  const rawImages: string[] = [];
+  if (Array.isArray(product.images)) {
+    rawImages.push(...product.images.filter((img) => typeof img === 'string' && img.trim().length > 0));
+  }
+  if ((product as any).image && typeof (product as any).image === 'string') {
+    rawImages.push((product as any).image);
+  }
+  if ((product as any).imageUrl && typeof (product as any).imageUrl === 'string') {
+    rawImages.push((product as any).imageUrl);
+  }
+  const images = Array.from(new Set(rawImages));
+  const currentImage = images[activeImgIndex] || images[0] || null;
 
   const handleAddToCart = () => {
     onAddToCart(product, quantity);
@@ -77,49 +96,78 @@ export const ProductModal: React.FC<ProductModalProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 bg-[#000000]/80 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4 overflow-y-auto">
+      <div className="fixed inset-0 z-50 bg-[#000000]/85 backdrop-blur-sm flex items-center justify-center p-0 sm:p-4 overflow-y-auto">
         <div 
           className="relative w-full max-w-3xl bg-[#111116] border border-[#2A2A36] sm:rounded-3xl shadow-2xl overflow-hidden min-h-screen sm:min-h-0 sm:max-h-[92vh] flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Top Close Button bar */}
-          <div className="sticky top-0 z-20 flex items-center justify-between px-4 py-3 bg-[#111116]/90 backdrop-blur-md border-b border-[#22222E]">
+          {/* Top Bar with Clear "Назад к списку" button and Close button */}
+          <div className="sticky top-0 z-20 flex items-center justify-between px-3 sm:px-5 py-3 bg-[#111116]/95 backdrop-blur-md border-b border-[#22222E]">
             <div className="flex items-center gap-2">
+              <button
+                id="product-modal-back-btn"
+                onClick={onClose}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1C1C28] hover:bg-[#262638] text-[#F4F1EA] text-xs font-semibold border border-[#2D2D3E] hover:border-[#D4AF37]/50 active:scale-95 transition-all shadow-sm group"
+                aria-label={language === 'ru' ? 'Назад к товарам' : 'Тауарларға қайту'}
+              >
+                <ArrowLeft className="w-4 h-4 text-[#D4AF37] group-hover:-translate-x-0.5 transition-transform" />
+                <span>{language === 'ru' ? 'Назад' : 'Артқа'}</span>
+              </button>
+
               {categoryName && (
-                <span className="text-xs text-[#C5A059] font-medium tracking-wide uppercase">
+                <span className="hidden sm:inline-flex items-center text-xs text-[#C5A059] font-medium tracking-wide uppercase px-2.5 py-1 rounded-lg bg-[#181824] border border-[#252535]">
                   {category?.icon} {categoryName}
                 </span>
               )}
             </div>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-full bg-[#1A1A24] hover:bg-[#252533] text-[#A8A49A] hover:text-[#F4F1EA] transition-colors"
-              aria-label={t.close}
-            >
-              <X className="w-5 h-5" />
-            </button>
+
+            <div className="flex items-center gap-2">
+              {categoryName && (
+                <span className="sm:hidden text-[11px] text-[#C5A059] font-medium truncate max-w-[140px]">
+                  {categoryName}
+                </span>
+              )}
+              <button
+                id="product-modal-close-btn"
+                onClick={onClose}
+                className="p-2 rounded-full bg-[#1A1A24] hover:bg-[#252533] text-[#A8A49A] hover:text-[#F4F1EA] transition-colors"
+                aria-label={t.close}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
 
           <div className="overflow-y-auto flex-grow p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Left: Photos and Gallery */}
             <div className="flex flex-col gap-3">
               <div 
-                onClick={() => currentImage && setIsLightboxOpen(true)}
-                className="relative aspect-square w-full rounded-2xl bg-[#181822] border border-[#262634] overflow-hidden flex items-center justify-center cursor-zoom-in group"
+                onClick={() => currentImage && !imgError && setIsLightboxOpen(true)}
+                className="relative aspect-square w-full min-h-[280px] sm:min-h-[340px] rounded-2xl bg-[#161622] border border-[#262634] overflow-hidden flex items-center justify-center cursor-zoom-in group shrink-0 shadow-inner"
               >
-                {currentImage ? (
+                {currentImage && !imgError ? (
                   <img
+                    key={`${product.id}-${activeImgIndex}`}
                     src={currentImage}
                     alt={title}
+                    referrerPolicy="no-referrer"
+                    crossOrigin="anonymous"
+                    loading="eager"
+                    onError={() => setImgError(true)}
                     className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-300"
                   />
                 ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center text-center p-6 bg-[#161620]">
-                    <Sparkles className="w-10 h-10 text-[#C5A059] mb-3" />
-                    <span className="font-brand text-sm text-[#D4AF37] tracking-widest uppercase">
+                  <div className="w-full h-full flex flex-col items-center justify-center text-center p-6 bg-gradient-to-br from-[#1A1A26] to-[#111118]">
+                    <div className="w-16 h-16 rounded-2xl bg-[#161622] border border-[#C5A059]/40 flex items-center justify-center mb-3 text-[#D4AF37] shadow-inner">
+                      <Sparkles className="w-8 h-8 text-[#D4AF37]" />
+                    </div>
+                    <span className="font-brand text-sm font-semibold text-[#D4AF37] tracking-widest uppercase">
                       MUSLIM SHOP
                     </span>
                     <span className="text-xs text-[#8A857C] mt-1">АТЫРАУ · БУТИК №24</span>
+                    <span className="text-[11px] text-[#A6A29A] mt-2 px-3 py-1 rounded-full bg-[#1A1A24] border border-[#262636] line-clamp-1 max-w-[85%]">
+                      {title}
+                    </span>
                   </div>
                 )}
 
@@ -355,6 +403,8 @@ export const ProductModal: React.FC<ProductModalProps> = ({
             <img
               src={currentImage}
               alt={title}
+              referrerPolicy="no-referrer"
+              crossOrigin="anonymous"
               className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl"
             />
 

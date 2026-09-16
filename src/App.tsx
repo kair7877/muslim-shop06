@@ -83,9 +83,102 @@ export default function App() {
   const [showPrayerOnHomepage, setShowPrayerOnHomepage] = useState(true);
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
 
+  // Scroll preservation and history tracking for product modal
+  const savedScrollPositionRef = useRef<number>(0);
+  const lastOpenedProductIdRef = useRef<string | null>(null);
+  const modalHistoryPushedRef = useRef<boolean>(false);
+
+  // Sync state refs for popstate handler
+  const selectedProductRef = useRef<Product | null>(null);
+  const isCartOpenRef = useRef(false);
+  const isCheckoutOpenRef = useRef(false);
+  const isSearchFilterOpenRef = useRef(false);
+  const isAdminOpenRef = useRef(false);
+  const isPrayerModalOpenRef = useRef(false);
+
+  useEffect(() => {
+    selectedProductRef.current = selectedProduct;
+  }, [selectedProduct]);
+
+  useEffect(() => {
+    isCartOpenRef.current = isCartOpen;
+  }, [isCartOpen]);
+
+  useEffect(() => {
+    isCheckoutOpenRef.current = isCheckoutOpen;
+  }, [isCheckoutOpen]);
+
+  useEffect(() => {
+    isSearchFilterOpenRef.current = isSearchFilterOpen;
+  }, [isSearchFilterOpen]);
+
+  useEffect(() => {
+    isAdminOpenRef.current = isAdminOpen;
+  }, [isAdminOpen]);
+
+  useEffect(() => {
+    isPrayerModalOpenRef.current = isPrayerModalOpen;
+  }, [isPrayerModalOpen]);
+
   // Back button interception & Exit Confirmation Dialog
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const allowExitRef = useRef(false);
+
+  const restoreCatalogScroll = (savedY: number, prodId: string | null) => {
+    // Restore exact scroll position
+    window.scrollTo({ top: savedY, behavior: 'instant' as ScrollBehavior });
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: savedY, behavior: 'instant' as ScrollBehavior });
+    });
+    setTimeout(() => {
+      window.scrollTo({ top: savedY, behavior: 'instant' as ScrollBehavior });
+      if (savedY <= 0 && prodId) {
+        const el = document.getElementById(`product-card-${prodId}`);
+        if (el) {
+          el.scrollIntoView({ block: 'center', behavior: 'instant' as ScrollBehavior });
+        }
+      }
+    }, 40);
+  };
+
+  const handleOpenProduct = (product: Product) => {
+    // Save exact scroll position before opening modal
+    const currentScroll = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || 0;
+    savedScrollPositionRef.current = currentScroll;
+    lastOpenedProductIdRef.current = product.id;
+
+    setSelectedProduct(product);
+
+    // Push entry to browser history so mobile/browser "Назад" closes the product modal
+    try {
+      window.history.pushState({ modal: 'product', id: product.id }, '', window.location.href);
+      modalHistoryPushedRef.current = true;
+    } catch (e) {
+      console.error('History pushState failed', e);
+    }
+  };
+
+  const handleCloseProduct = (fromPopState = false) => {
+    const savedY = savedScrollPositionRef.current;
+    const prodId = lastOpenedProductIdRef.current;
+
+    setSelectedProduct(null);
+
+    // If closed via on-screen button ("Назад", "X", outside click), unwind modal history entry
+    if (!fromPopState && modalHistoryPushedRef.current) {
+      modalHistoryPushedRef.current = false;
+      try {
+        window.history.back();
+      } catch (e) {
+        console.error(e);
+      }
+    } else if (fromPopState) {
+      modalHistoryPushedRef.current = false;
+    }
+
+    // Restore scroll position so user returns to the exact same browsing spot
+    restoreCatalogScroll(savedY, prodId);
+  };
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -103,7 +196,36 @@ export default function App() {
         return;
       }
 
-      // Re-push guard state to prevent exiting the page immediately
+      // Priority 1: If product modal is open, close product and preserve scroll!
+      if (selectedProductRef.current) {
+        handleCloseProduct(true);
+        return;
+      }
+
+      // Priority 2: If any other modal/drawer is open, close it
+      if (isCartOpenRef.current) {
+        setIsCartOpen(false);
+        return;
+      }
+      if (isCheckoutOpenRef.current) {
+        setIsCheckoutOpen(false);
+        return;
+      }
+      if (isSearchFilterOpenRef.current) {
+        setIsSearchFilterOpen(false);
+        return;
+      }
+      if (isAdminOpenRef.current) {
+        setIsAdminOpen(false);
+        return;
+      }
+      if (isPrayerModalOpenRef.current) {
+        setIsPrayerModalOpen(false);
+        return;
+      }
+
+      // Priority 3: Only when user is on the base catalog page with no modals open,
+      // intercept exit and show the confirmation modal
       try {
         window.history.pushState({ guard: 'muslim_shop' }, '', window.location.href);
       } catch (e) {
@@ -544,7 +666,7 @@ export default function App() {
                   product={product}
                   language={language}
                   whatsappNumber={settings.whatsappNumber}
-                  onSelectProduct={(p) => setSelectedProduct(p)}
+                  onSelectProduct={(p) => handleOpenProduct(p)}
                   onAddToCart={(p) => handleAddToCart(p, 1)}
                   onBuyNow={(p) => handleBuyNow(p, 1)}
                 />
@@ -658,7 +780,7 @@ export default function App() {
         categories={categories}
         language={language}
         whatsappNumber={settings.whatsappNumber}
-        onClose={() => setSelectedProduct(null)}
+        onClose={() => handleCloseProduct(false)}
         onAddToCart={(p, qty) => handleAddToCart(p, qty)}
         onBuyNow={(p, qty) => handleBuyNow(p, qty)}
       />
