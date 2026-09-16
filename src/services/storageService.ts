@@ -221,7 +221,7 @@ const INITIAL_SETTINGS: StoreSettings = {
   pickupInfoRu: 'г. Атырау, пр. Султана Бейбарыса, 45а/5. Выдача заказов ежедневно с 10:00 до 21:00.',
   pickupInfoKz: 'Атырау қ., Сұлтан Бейбарыс даңғылы, 45а/5. Тапсырыстарды күн сайын 10:00-ден 21:00-ге дейін алып кетуге болады.',
   currency: '₸',
-  adminPin: '1234',
+  adminPin: '505534',
 };
 
 const INITIAL_ORDERS: Order[] = [
@@ -672,11 +672,14 @@ class StorageService {
       }
       const parsed = JSON.parse(data);
       const merged: StoreSettings = { ...INITIAL_SETTINGS, ...parsed };
-      // Auto-migrate to current 2GIS, Instagram, and address
-      if (!merged.gis2Url || merged.instagram === 'muslimshop_atyrau' || merged.address.includes('Байзар')) {
+      // Auto-migrate to current 2GIS, Instagram, address, and adminPin
+      if (!merged.gis2Url || merged.instagram === 'muslimshop_atyrau' || merged.address.includes('Байзар') || merged.adminPin === '1234') {
         merged.gis2Url = INITIAL_SETTINGS.gis2Url;
         merged.instagram = INITIAL_SETTINGS.instagram;
         merged.address = INITIAL_SETTINGS.address;
+        if (merged.adminPin === '1234') {
+          merged.adminPin = '505534';
+        }
         this.saveSettingsLocal(merged);
       }
       return merged;

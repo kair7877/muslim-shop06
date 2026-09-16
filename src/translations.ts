@@ -117,7 +117,7 @@ export const translations = {
     // Admin
     adminTitle: 'Панель управления',
     adminLoginPrompt: 'Вход для администратора',
-    adminPinPlaceholder: 'Введите PIN-код (по умолчанию: 1234)',
+    adminPinPlaceholder: 'Введите PIN-код',
     adminLoginBtn: 'Войти',
     adminLogout: 'Выйти',
     adminTabProducts: 'Товары',
@@ -176,6 +176,12 @@ export const translations = {
     status_shipped: 'Передан в доставку',
     status_completed: 'Выполнен',
     status_cancelled: 'Отменён',
+
+    // Exit confirmation modal
+    exitConfirmTitle: 'Выйти из магазина?',
+    exitConfirmMessage: 'Вы уверены, что хотите покинуть сайт? Ваши выбранные товары останутся сохранены в корзине.',
+    exitConfirmYes: 'Да, выйти',
+    exitConfirmNo: 'Нет, остаться',
 
     // Badges
     hitBadge: 'ХИТ',
@@ -305,7 +311,7 @@ export const translations = {
     // Admin
     adminTitle: 'Басқару тақтасы',
     adminLoginPrompt: 'Әкімшіге кіру',
-    adminPinPlaceholder: 'PIN-код енгізіңіз (әдепкі: 1234)',
+    adminPinPlaceholder: 'PIN-код енгізіңіз',
     adminLoginBtn: 'Кіру',
     adminLogout: 'Шығу',
     adminTabProducts: 'Тауарлар',
@@ -364,6 +370,12 @@ export const translations = {
     status_shipped: 'Жеткізуге берілді',
     status_completed: 'Орындалды',
     status_cancelled: 'Бас тартылды',
+
+    // Exit confirmation modal
+    exitConfirmTitle: 'Дүкеннен шығу керек пе?',
+    exitConfirmMessage: 'MUSLIM SHOP дүкенінен шыққыңыз келетініне сенімдісіз бе? Таңдалған тауарларыңыз себетте сақталады.',
+    exitConfirmYes: 'Иә, шығу',
+    exitConfirmNo: 'Жоқ, қалу',
 
     // Badges
     hitBadge: 'ХИТ',

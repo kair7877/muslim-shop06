@@ -18,6 +18,7 @@ import { BottomNav } from './components/BottomNav';
 import { AdminPanel } from './components/AdminPanel';
 import { Footer } from './components/Footer';
 import { PrayerTimesWidget } from './components/PrayerTimesWidget';
+import { ExitConfirmModal } from './components/ExitConfirmModal';
 import { Search, SlidersHorizontal, ShoppingBag, X, Clock, Sparkles } from 'lucide-react';
 
 const CART_STORAGE_KEY = 'muslim_shop_cart_v1';
@@ -81,6 +82,68 @@ export default function App() {
   const [isPrayerModalOpen, setIsPrayerModalOpen] = useState(false);
   const [showPrayerOnHomepage, setShowPrayerOnHomepage] = useState(true);
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
+
+  // Back button interception & Exit Confirmation Dialog
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+  const allowExitRef = useRef(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Push initial guard state to history
+    try {
+      window.history.pushState({ guard: 'muslim_shop' }, '', window.location.href);
+    } catch (e) {
+      console.error('History pushState failed', e);
+    }
+
+    const handlePopState = () => {
+      // If user clicked "Да, выйти", allow standard back navigation
+      if (allowExitRef.current) {
+        return;
+      }
+
+      // Re-push guard state to prevent exiting the page immediately
+      try {
+        window.history.pushState({ guard: 'muslim_shop' }, '', window.location.href);
+      } catch (e) {
+        console.error('History pushState failed', e);
+      }
+
+      // Show exit confirmation modal
+      setShowExitConfirm(true);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
+
+  const handleStayInStore = () => {
+    setShowExitConfirm(false);
+  };
+
+  const handleConfirmExit = () => {
+    allowExitRef.current = true;
+    setShowExitConfirm(false);
+
+    // Unwind the guard entries so the browser actually goes back
+    try {
+      window.history.go(-2);
+    } catch {
+      window.history.back();
+    }
+
+    // Fallback if window opened directly and cannot go back
+    setTimeout(() => {
+      try {
+        window.close();
+      } catch {
+        // Safe fallback
+      }
+    }, 300);
+  };
 
   // Search, Filters & Sorting State
   const [searchQuery, setSearchQuery] = useState('');
@@ -679,6 +742,14 @@ export default function App() {
           onResetDefaults={handleResetDefaults}
         />
       )}
+
+      {/* 16. Exit Confirmation Dialog for Browser/Mobile Back Button */}
+      <ExitConfirmModal
+        isOpen={showExitConfirm}
+        onStay={handleStayInStore}
+        onExit={handleConfirmExit}
+        language={language}
+      />
     </div>
   );
 }
